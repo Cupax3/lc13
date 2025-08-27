@@ -21,33 +21,40 @@ export function changelogToYml(changelog, login) {
 }
 
 export async function processAutoChangelog({ github, context }) {
-	if (context.payload.event_name == "pull_request") {
-		const changelog = parseChangelog(context.payload.pull_request.body);
-		if (!changelog || changelog.changes.length === 0) {
-			console.log("no changelog found");
+	let changelog, userlogin, commitnumber, commitstring
+	switch (context.eventName) {
+		case "pull_request":
+			changelog = parseChangelog(context.payload.pull_request.body)
+			userlogin = context.payload.pull_request.user.login
+			commitnumber = `pr-${context.payload.pull_request.number}`
+			commitstring = `PR #${context.payload.pull_request.number}`
+			break;
+		case "push":
+			changelog = parseChangelog(context.payload.head_commit.message)
+			userlogin = context.payload.head_commit.author.username
+			commitnumber = `commit-${context.sha}`
+			commitstring = `Commit SHA${context.sha}`
+			break;
+		default:
+			console.log("unsupported event type")
 			return;
-		}
-	} else if (context.payload.event_name == "push") {
-		const changelog = parseChangelog(context.payload.head_commit.message);
-		if (!changelog || changelog.changes.length === 0) {
-			console.log("no changelog found");
-			return;
-		}
-	} else {
-		console.log("unsupported event type");
+	}
+
+	if (!changelog || changelog.changes.length === 0) {
+		console.log("no changelog found");
 		return;
 	}
 
 	const yml = changelogToYml(
 		changelog,
-		context.payload.pull_request.user.login
+		userlogin
 	);
 
 	github.rest.repos.createOrUpdateFileContents({
 		owner: context.repo.owner,
 		repo: context.repo.repo,
-		path: `html/changelogs/AutoChangeLog-pr-${context.payload.pull_request.number}.yml`,
-		message: `Automatic changelog for PR #${context.payload.pull_request.number} [ci skip]`,
+		path: `html/changelogs/AutoChangeLog-${commitnumber}.yml`,
+		message: `Automatic changelog for ${commitstring} [ci skip]`,
 		content: Buffer.from(yml).toString("base64"),
 	});
 }
